@@ -48,6 +48,11 @@ class Currency:
         return self.is_valid_
 
 class BusinessDayConvention:
+
+    @classmethod
+    def new(cls, input='NONE'):
+        """Return the native QuantLib value required by the date APIs."""
+        return cls(input).value
     
     def __init__(self, input : Optional[str]='NONE') -> None:
         self.value_str_ = input
@@ -72,6 +77,11 @@ class BusinessDayConvention:
         return self.value_str_
     
 class HolidayConvention:
+
+    @classmethod
+    def new(cls, input='NONE'):
+        """Return the native QuantLib value required by the date APIs."""
+        return cls(input).value
     
     def __init__(self, input : Optional[str]='NONE') -> None:
         self.value_str_ = input
@@ -100,6 +110,11 @@ class HolidayConvention:
         return self.value_str_
 
 class AccrualBasis(ql.DayCounter):
+
+    @classmethod
+    def new(cls, input='NONE'):
+        """Return the native QuantLib value required by the date APIs."""
+        return cls(input).value
 
     def __init__(self, input : Optional[str]='NONE') -> None:
         self.value_ = None

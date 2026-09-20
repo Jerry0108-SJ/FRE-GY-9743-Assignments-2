@@ -2,10 +2,14 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+import QuantLib as ql
 
 from fixedincomelib.apis.date import qfCreateSchedule
-from fixedincomelib.date import Date, Period, accrued, add_period, frequency_from_period
+from fixedincomelib.date import Date, Period, accrued, add_period
 from fixedincomelib.market.basics import AccrualBasis, BusinessDayConvention, HolidayConvention
+
+
+__all__ = ["BondCalculator"]
 
 
 class BondCalculator:
@@ -36,7 +40,7 @@ class BondCalculator:
         self.face_value = face_value if face_value is not None else self.conv['face value']
         self.redemption = redemption if redemption is not None else self.conv['redemption']
         self.coupon_period = Period(self.conv['coupon accrual period'])
-        self.frequency = frequency_from_period(self.coupon_period)
+        self.frequency = float(self.coupon_period.frequency())
         self.accrual_basis = AccrualBasis(self.conv['accrual basis'])
         self.first_accrual_basis = AccrualBasis(self.conv['first period accrual basis'])
         self.last_accrual_basis = AccrualBasis(self.conv['last period accrual basis'])
@@ -53,8 +57,8 @@ class BondCalculator:
     def settlement_date(self, value_date: str) -> Date:
         return add_period(
             Date(value_date), Period(self.conv['settlement offset']),
-            BusinessDayConvention(self.conv['settlement business day convention']),
-            HolidayConvention(self.conv['settlement holiday convention']))
+            BusinessDayConvention.new(self.conv['settlement business day convention']),
+            HolidayConvention.new(self.conv['settlement holiday convention']))
 
     def yield_to_price(self, value_date: Optional[str] = None,
                        yield_rate: Optional[float] = None, *,
@@ -105,13 +109,19 @@ class BondCalculator:
            for accrual basis and accrual-date business/holiday conventions;
            pass payment offset and payment conventions separately.
            Set first_regular_date=first_cpn_date (None if it equals maturity),
-           and last_regular_date=conv['last regular coupon date'].
+           and next_to_last_date=conv['last regular coupon date'].
+           Payment keywords are payment_offset_business_day_convention and
+           payment_offset_holiday_convention.
         2. Convert each row into a dict: start_date/end_date/payment_date
            as Date objects, is_regular as bool, plus period_type/accrual_basis.
            Label row 0 'first' with first_accrual_basis; otherwise the final
            row is 'last' with last_accrual_basis; others use 'regular' and
            accrual_basis. A single row is therefore 'first'.
-        3. Return the list. Do not calculate coupons or reference dates here.
+        3. The API does not return IsRegular. Recreate the same ql.Schedule
+           (unadjusted, with the same rule, tenor, anchors and end_of_month)
+           to read isRegular(i+1). Also treat end=start+one coupon period as
+           regular, using unadjusted add_period and the end-of-month setting.
+           Save this bool as is_regular. Return the list; no coupons yet.
 
         Example (6M, BACKWARD, ISMA-30/360): KSA's final dates are
         2054-02-03 -> 2054-08-03 -> 2055-01-21, so the last period is short.
@@ -126,7 +136,8 @@ class BondCalculator:
         2. Otherwise use period['accrual_basis']. Set ref_end=end_date and
            ref_start=ref_end minus one coupon period; save these initial
            dates in period['ref_start'] and period['ref_end'].
-           Use add_period with NONE business/holiday rules and end_of_month.
+           Use add_period with BusinessDayConvention.new('NONE'),
+           HolidayConvention.new('NONE') and end_of_month (native API values).
         3. If basis.needs_reference_period (ICMA), walk this grid BACKWARD
            until it covers start_date. For each overlap, add
            _year_fraction(max(start_date, ref_start), ref_end, basis,
@@ -149,7 +160,8 @@ class BondCalculator:
         2. Otherwise use period['accrual_basis']. Set ref_start=start_date
            and ref_end=ref_start plus one coupon period; save these initial
            dates in period['ref_start'] and period['ref_end'].
-           Use add_period with NONE business/holiday rules and end_of_month.
+           Use add_period with BusinessDayConvention.new('NONE'),
+           HolidayConvention.new('NONE') and end_of_month (native API values).
         3. If basis.needs_reference_period (ICMA), walk this grid FORWARD
            until it covers end_date. For each overlap, add
            _year_fraction(ref_start, min(end_date, ref_end), basis,
@@ -268,7 +280,9 @@ class BondCalculator:
         return remaining / reference
 
     def _year_fraction(self, start_date, end_date, basis, reference_period_start=None, reference_period_end=None):
-        if not basis.needs_reference_period:
-            reference_period_start = reference_period_end = None
-        return accrued(start_date, end_date, basis, BusinessDayConvention('NONE'), HolidayConvention('NONE'),
-                       reference_period_start, reference_period_end)
+        # ICMA needs reference dates; the new accrued API does not accept them.
+        if basis.needs_reference_period:
+            return basis.value.yearFraction(
+                start_date, end_date, reference_period_start, reference_period_end)
+        return accrued(start_date, end_date, basis.value,
+                       BusinessDayConvention.new('NONE'), HolidayConvention.new('NONE'))
