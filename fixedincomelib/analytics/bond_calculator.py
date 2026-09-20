@@ -17,21 +17,6 @@ class BondCalculator:
         calculator = BondCalculator(bond_convention=bond_convention)
         cashflows = calculator.schedule_dataframe()
 
-    Input assumptions (not checked here):
-    - All convention keys shown in the notebook are present and correctly spelled.
-    - Dates satisfy accrual start < first coupon <= maturity; coupon frequency,
-      face and redemption are positive, and rates/amounts are finite.
-    - Supply exactly one of value_date or settlement_date, with settlement
-      on/after accrual start and before maturity. A value_date requires known
-      settlement terms. KSA uses explicit settlement with None for those terms.
-    - Yield gives positive discount denominators; inversion has positive dirty
-      price and a convergent bisection search within max_iter.
-    - First/last stubs use the specified coupon grid; a single-period bond is
-      treated as a first period. Rates are decimals and redemption is a factor.
-    The original separate constructor arguments remain supported and override
-    the corresponding dictionary terms when explicitly supplied.
-    Dictionary keys use the exact lowercase spelling shown in the notebook.
-    All dictionary access uses dict[key]; unused last regular date is None.
     """
     def __init__(self, issue_date: Optional[str] = None,
                  first_acc_date: Optional[str] = None,
